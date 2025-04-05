@@ -3,13 +3,33 @@ import email
 from email.header import decode_header
 import tkinter as tk
 from tkinter import scrolledtext
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.linear_model import LogisticRegression
+from sklearn.pipeline import make_pipeline
+import numpy as np
 
-# 🔴 ENTER YOUR EMAIL & PASSWORD HERE (Use an App Password for Gmail)
-EMAIL_USER = "INSERT GMAIL"  
-EMAIL_PASS = "INSERT GMAIL APP PASSWORD"  
 
-# Keywords to detect phishing
-PHISHING_KEYWORDS = ["urgent", "password", "bank", "click here", "verify", "free", "account locked", "update payment"]
+EMAIL_USER = "INSERT GMAIL ADDRESS"  
+EMAIL_PASS = "INSERT GMAIL APPLICATION PASSWORD"  
+
+# Sample dataset for training
+sample_data = [
+    ("Congratulations, you've won a prize! Claim it now!", 1),  # Phishing
+    ("Important notice about your account", 1),  # Phishing
+    ("Meeting tomorrow at 10 AM", 0),  # Legitimate
+    ("Your invoice for the recent purchase", 0),  # Legitimate
+    ("Urgent: Your bank account has been compromised", 1),  # Phishing
+    ("Reminder: Payment due for your subscription", 0),  # Legitimate
+]
+
+# Separate the emails and labels
+texts, labels = zip(*sample_data)
+
+# Create a pipeline that combines TfidfVectorizer and LogisticRegression
+model = make_pipeline(TfidfVectorizer(), LogisticRegression())
+
+# Train the model
+model.fit(texts, labels)
 
 def connect_email():
     """Connects to the email inbox using IMAP."""
@@ -29,15 +49,16 @@ def fetch_emails():
         return
     
     _, msg_nums = mail.search(None, "ALL")
-    emails = msg_nums[0].split()[-100:]  # Get last 100 emails
+    emails = msg_nums[0].split()[-100:]  # Get last 10 emails
 
     phishing_emails = []
     for num in emails:
         _, msg_data = mail.fetch(num, "(RFC822)")
+
         for response_part in msg_data:
             if isinstance(response_part, tuple):
                 msg = email.message_from_bytes(response_part[1])
-                
+
                 # Decode email subject
                 subject, encoding = decode_header(msg["Subject"])[0]
                 if isinstance(subject, bytes):
@@ -49,8 +70,9 @@ def fetch_emails():
                 # Get email body
                 body = extract_email_body(msg)
 
-                # Check for phishing keywords
-                if any(keyword.lower() in body.lower() for keyword in PHISHING_KEYWORDS):
+                # Predict if email is phishing
+                prediction = predict_email(body)
+                if prediction == "Phishing":
                     phishing_emails.append(f"🔴 {subject}\n   From: {sender}\n")
 
     mail.logout()
@@ -75,6 +97,11 @@ def extract_email_body(msg):
     else:
         body = msg.get_payload(decode=True).decode(errors="ignore")
     return body
+
+def predict_email(email_text):
+    """Predicts if an email is phishing or legitimate."""
+    prediction = model.predict([email_text])[0]
+    return "Phishing" if prediction == 1 else "Legitimate"
 
 # GUI Setup
 root = tk.Tk()
